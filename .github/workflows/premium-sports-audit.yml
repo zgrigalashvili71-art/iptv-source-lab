@@ -1,0 +1,427 @@
+name: Premium Sports Audit
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "41 5 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout lab repository
+        uses: actions/checkout@v4
+
+      - name: Clone candidate repositories
+        shell: bash
+        run: |
+          set -e
+          rm -rf candidates
+          mkdir -p candidates
+
+          git clone --depth=1 https://github.com/abyssscold/High-Stability-IPTV-Service.git candidates/high-stability || true
+          git clone --depth=1 https://github.com/SHAJON-404/iptv.git candidates/shajon || true
+          git clone --depth=1 https://github.com/LS-Station/IPTVPulse-Daily-Updates.git candidates/iptvpulse || true
+
+      - name: Audit premium sports channel presence and reachability
+        shell: python
+        run: |
+          import json
+          import re
+          import socket
+          import ssl
+          import time
+          import urllib.error
+          import urllib.request
+          from collections import Counter, defaultdict
+          from pathlib import Path
+          from urllib.parse import urlparse
+
+          OUT = Path("reports")
+          OUT.mkdir(exist_ok=True)
+
+          CURRENT_V2 = "https://raw.githubusercontent.com/zgrigalashvili71-art/-mega-iptv/main/ALL_TV_PLUS_SPORTS.m3u"
+
+          # SHAJON's documented channel databases.
+          SHAJON_JSONS = [
+              ("SHAJON channels.json", "https://raw.githubusercontent.com/SHAJON-404/iptv-docs/main/app/data/channels.json"),
+              ("SHAJON sports.json", "https://raw.githubusercontent.com/SHAJON-404/iptv-docs/main/app/data/sports.json"),
+          ]
+
+          REPOS = [
+              ("High-Stability-IPTV-Service", Path("candidates/high-stability")),
+              ("SHAJON-404 IPTV", Path("candidates/shajon")),
+              ("IPTVPulse-Daily-Updates", Path("candidates/iptvpulse")),
+          ]
+
+          SPORTS_BRANDS = [
+              "bein", "beIN", "sky sports", "dazn", "tnt sports", "bt sport",
+              "espn", "fox sports", "supersport", "super sport", "eurosport",
+              "canal+ sport", "canal plus sport", "eleven sports", "premier sports",
+              "viaplay sports", "ziggo sport", "sport tv", "max sport", "setanta",
+              "nba tv", "nfl network", "mlb network", "nhl network", "f1 tv",
+              "formula 1", "motogp", "ufc", "wwe network", "golf channel",
+              "tennis channel", "racing tv", "arena sport", "match tv",
+              "sport klub", "sportklub", "nova sport", "polsat sport",
+              "movistar deportes", "movistar liga", "laliga tv", "premier league",
+              "champions league"
+          ]
+
+          URL_RE = re.compile(r'https?://[^\s\'"<>]+', re.I)
+          EXTINF_RE = re.compile(r'#EXTINF[^\n]*,(.*)', re.I)
+
+          def norm_name(s):
+              s = re.sub(r'\s+', ' ', str(s or '')).strip()
+              return s
+
+          def matches_brand(name):
+              low = name.lower()
+              return any(k.lower() in low for k in SPORTS_BRANDS)
+
+          def brand_for(name):
+              low = name.lower()
+              found = [k for k in SPORTS_BRANDS if k.lower() in low]
+              return found[0] if found else "sports"
+
+          def fetch_text(url, tries=3, timeout=45):
+              last = None
+              for i in range(tries):
+                  try:
+                      req = urllib.request.Request(
+                          url,
+                          headers={"User-Agent": "Mozilla/5.0 PremiumSportsAudit/1.0", "Accept": "*/*"}
+                      )
+                      with urllib.request.urlopen(req, timeout=timeout) as r:
+                          return r.read().decode("utf-8", errors="replace")
+                  except Exception as e:
+                      last = e
+                      time.sleep(2 * (i + 1))
+              raise last
+
+          def extract_urls(value):
+              urls = []
+              if isinstance(value, str):
+                  for u in URL_RE.findall(value):
+                      urls.append(u.rstrip("),.;]}\\"))
+              elif isinstance(value, dict):
+                  for v in value.values():
+                      urls.extend(extract_urls(v))
+              elif isinstance(value, list):
+                  for v in value:
+                      urls.extend(extract_urls(v))
+              return urls
+
+          NAME_KEYS = (
+              "name", "title", "channel", "channel_name", "channelName",
+              "label", "display_name", "displayName", "tvg-name", "id"
+          )
+          GROUP_KEYS = ("group", "category", "group-title", "country", "region", "type")
+
+          def name_from_dict(d):
+              for k in NAME_KEYS:
+                  if k in d and isinstance(d[k], (str, int, float)):
+                      val = norm_name(d[k])
+                      if val:
+                          return val
+              # Fallback: join a few short descriptive string fields.
+              vals = []
+              for k, v in d.items():
+                  if isinstance(v, str) and len(v) <= 100 and not v.startswith("http"):
+                      vals.append(v)
+                      if len(vals) >= 3:
+                          break
+              return " | ".join(vals)
+
+          def group_from_dict(d):
+              vals = []
+              for k in GROUP_KEYS:
+                  if k in d and isinstance(d[k], (str, int, float)):
+                      vals.append(norm_name(d[k]))
+              return " / ".join(v for v in vals if v)
+
+          def special_requirements(d):
+              keys = {str(k).lower() for k in d.keys()}
+              flags = []
+              if any(k in keys for k in ("headers", "header", "http_headers")):
+                  flags.append("custom_headers")
+              if any(k in keys for k in ("referer", "referrer", "origin")):
+                  flags.append("referer_or_origin")
+              if any("proxy" in k for k in keys):
+                  flags.append("proxy_field")
+              if any("drm" in k or "clearkey" in k or "license" in k for k in keys):
+                  flags.append("drm_metadata")
+              return ",".join(flags)
+
+          def walk_json(obj, source_name, rows):
+              if isinstance(obj, dict):
+                  name = name_from_dict(obj)
+                  if name and matches_brand(name):
+                      urls = list(dict.fromkeys(extract_urls(obj)))
+                      rows.append({
+                          "source": source_name,
+                          "name": name,
+                          "group": group_from_dict(obj),
+                          "brand": brand_for(name),
+                          "urls": urls,
+                          "special": special_requirements(obj),
+                      })
+                  for v in obj.values():
+                      walk_json(v, source_name, rows)
+              elif isinstance(obj, list):
+                  for v in obj:
+                      walk_json(v, source_name, rows)
+
+          def parse_m3u(text, source_name, rows):
+              pending_name = None
+              pending_group = ""
+              for raw in text.splitlines():
+                  line = raw.strip()
+                  if not line:
+                      continue
+                  if line.upper().startswith("#EXTINF"):
+                      pending_name = line.split(",", 1)[1].strip() if "," in line else line
+                      m = re.search(r'group-title="([^"]*)"', line, re.I)
+                      pending_group = m.group(1) if m else ""
+                  elif pending_name and not line.startswith("#"):
+                      if matches_brand(pending_name):
+                          rows.append({
+                              "source": source_name,
+                              "name": pending_name,
+                              "group": pending_group,
+                              "brand": brand_for(pending_name),
+                              "urls": [line] if line.lower().startswith(("http://", "https://")) else [],
+                              "special": "",
+                          })
+                      pending_name = None
+                      pending_group = ""
+
+          def parse_text_blob(text, source_name, rows):
+              # M3U first.
+              parse_m3u(text, source_name, rows)
+
+              # JSON if possible.
+              t = text.strip()
+              if t.startswith("{") or t.startswith("["):
+                  try:
+                      walk_json(json.loads(t), source_name, rows)
+                  except Exception:
+                      pass
+
+          def load_current_v2_names():
+              names = set()
+              try:
+                  text = fetch_text(CURRENT_V2, tries=2)
+                  for m in EXTINF_RE.finditer(text):
+                      name = norm_name(m.group(1))
+                      if name:
+                          names.add(name.lower())
+              except Exception as e:
+                  print("Could not load V2 names:", e)
+              return names
+
+          def probe(url, timeout=8):
+              if not url.lower().startswith(("http://", "https://")):
+                  return "NO_HTTP_URL"
+
+              req = urllib.request.Request(
+                  url,
+                  headers={
+                      "User-Agent": "Mozilla/5.0 PremiumSportsAudit/1.0",
+                      "Accept": "*/*",
+                      "Range": "bytes=0-2047",
+                  },
+                  method="GET",
+              )
+
+              ctx = ssl.create_default_context()
+
+              try:
+                  with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
+                      code = getattr(r, "status", 200)
+                      ctype = (r.headers.get("Content-Type") or "").lower()
+                      data = r.read(2048)
+                      sample = data.decode("utf-8", errors="ignore").lower()
+
+                      if code in (200, 206):
+                          if "#extm3u" in sample or "mpegurl" in ctype:
+                              return "HLS_RESPONSE"
+                          if "<mpd" in sample or "dash+xml" in ctype:
+                              return "DASH_RESPONSE"
+                          if ctype.startswith("video/") or "octet-stream" in ctype:
+                              return "MEDIA_RESPONSE"
+                          return f"HTTP_{code}"
+                      return f"HTTP_{code}"
+              except urllib.error.HTTPError as e:
+                  if e.code in (401, 403):
+                      return f"RESTRICTED_{e.code}"
+                  if e.code == 404:
+                      return "DEAD_404"
+                  return f"HTTP_ERROR_{e.code}"
+              except urllib.error.URLError as e:
+                  msg = str(e.reason).lower()
+                  if "timed out" in msg:
+                      return "TIMEOUT"
+                  if "ssl" in msg or "certificate" in msg:
+                      return "TLS_ERROR"
+                  return "NETWORK_ERROR"
+              except socket.timeout:
+                  return "TIMEOUT"
+              except Exception:
+                  return "ERROR"
+
+          rows = []
+
+          # 1) Parse documented SHAJON JSON feeds.
+          for source_name, url in SHAJON_JSONS:
+              try:
+                  text = fetch_text(url)
+                  parse_text_blob(text, source_name, rows)
+                  print(source_name, "parsed")
+              except Exception as e:
+                  print(source_name, "failed:", e)
+
+          # 2) Parse cloned repository text files.
+          allowed = {".m3u", ".m3u8", ".json", ".txt", ".md", ".js", ".ts", ".tsx", ".yml", ".yaml", ".csv"}
+          for repo_name, repo_path in REPOS:
+              if not repo_path.exists():
+                  continue
+              for p in repo_path.rglob("*"):
+                  if not p.is_file() or ".git" in p.parts or p.suffix.lower() not in allowed:
+                      continue
+                  try:
+                      if p.stat().st_size > 10_000_000:
+                          continue
+                      text = p.read_text(encoding="utf-8", errors="replace")
+                  except Exception:
+                      continue
+                  parse_text_blob(text, f"{repo_name}:{p.relative_to(repo_path)}", rows)
+
+          # De-duplicate records conservatively by source+name+first URL.
+          dedup = []
+          seen = set()
+          for r in rows:
+              first_url = r["urls"][0] if r["urls"] else ""
+              key = (r["source"], r["name"].lower(), first_url)
+              if key not in seen:
+                  seen.add(key)
+                  dedup.append(r)
+
+          current_names = load_current_v2_names()
+
+          # Probe only one URL per row and cap total probes.
+          # We do NOT use repo-provided custom headers/proxies/DRM info to bypass anything.
+          probe_budget = 250
+          probed = 0
+          for r in dedup:
+              r["in_v2_by_name"] = r["name"].lower() in current_names
+              if r["urls"] and probed < probe_budget:
+                  r["status"] = probe(r["urls"][0])
+                  probed += 1
+              elif r["urls"]:
+                  r["status"] = "NOT_PROBED_LIMIT"
+              else:
+                  r["status"] = "NO_DIRECT_URL"
+
+          # Summaries
+          by_source = defaultdict(list)
+          by_brand = defaultdict(list)
+          status_counts = Counter()
+
+          for r in dedup:
+              by_source[r["source"]].append(r)
+              by_brand[r["brand"].lower()].append(r)
+              status_counts[r["status"]] += 1
+
+          reachable_statuses = {"HLS_RESPONSE", "DASH_RESPONSE", "MEDIA_RESPONSE", "HTTP_200", "HTTP_206"}
+
+          lines = [
+              "# Premium Sports Audit",
+              "",
+              "This report checks whether the candidate sources contain premium-sports-branded channel names and whether a sample endpoint responds without using credentials, custom headers, proxies, DRM keys, or bypass techniques.",
+              "",
+              f"- Matching records discovered: **{len(dedup)}**",
+              f"- Endpoints probed: **{probed}**",
+              f"- Names also present in current V2: **{sum(1 for r in dedup if r['in_v2_by_name'])}**",
+              f"- Names not present in current V2: **{sum(1 for r in dedup if not r['in_v2_by_name'])}**",
+              "",
+              "## Probe status summary",
+          ]
+
+          for status, count in status_counts.most_common():
+              lines.append(f"- **{status}**: {count}")
+
+          lines += ["", "## Brand summary", "", "| Brand | Records | Reachable-response sample | Restricted 401/403 | Dead 404 | New names vs V2 |", "|---|---:|---:|---:|---:|---:|"]
+
+          for brand, rs in sorted(by_brand.items(), key=lambda kv: len(kv[1]), reverse=True):
+              reach = sum(1 for r in rs if r["status"] in reachable_statuses)
+              restricted = sum(1 for r in rs if r["status"] in ("RESTRICTED_401", "RESTRICTED_403"))
+              dead = sum(1 for r in rs if r["status"] == "DEAD_404")
+              new_names = sum(1 for r in rs if not r["in_v2_by_name"])
+              lines.append(f"| {brand} | {len(rs)} | {reach} | {restricted} | {dead} | {new_names} |")
+
+          lines += ["", "## Source summary", "", "| Source | Matching records | Reachable-response sample | New names vs V2 |", "|---|---:|---:|---:|"]
+
+          for source, rs in sorted(by_source.items(), key=lambda kv: len(kv[1]), reverse=True):
+              reach = sum(1 for r in rs if r["status"] in reachable_statuses)
+              new_names = sum(1 for r in rs if not r["in_v2_by_name"])
+              lines.append(f"| `{source}` | {len(rs)} | {reach} | {new_names} |")
+
+          lines += [
+              "",
+              "## Channel-name samples",
+              "",
+              "The report intentionally does **not** publish stream URLs.",
+              "",
+              "| Channel name | Brand | Source | Group/category | In current V2? | Probe status | Special metadata seen |",
+              "|---|---|---|---|---|---|---|",
+          ]
+
+          # Show most useful rows first: new vs V2, then reachable responses.
+          ordered = sorted(
+              dedup,
+              key=lambda r: (
+                  r["in_v2_by_name"],
+                  0 if r["status"] in reachable_statuses else 1,
+                  r["brand"].lower(),
+                  r["name"].lower(),
+              )
+          )
+
+          for r in ordered[:250]:
+              name = r["name"].replace("|", "/")
+              source = r["source"].replace("|", "/")
+              group = (r["group"] or "").replace("|", "/")
+              special = (r["special"] or "").replace("|", "/")
+              lines.append(
+                  f"| {name} | {r['brand']} | `{source}` | {group} | {'Yes' if r['in_v2_by_name'] else 'No'} | {r['status']} | {special} |"
+              )
+
+          lines += [
+              "",
+              "## How to interpret this",
+              "- `HLS_RESPONSE`, `DASH_RESPONSE`, or `MEDIA_RESPONSE` means the endpoint responded like media during a small probe.",
+              "- That does **not** prove the stream is authorized for redistribution or that it will remain stable.",
+              "- `RESTRICTED_401/403` means the endpoint refused the unauthenticated probe.",
+              "- `custom_headers`, `referer_or_origin`, `proxy_field`, or `drm_metadata` indicate the source record contains special playback metadata. This audit does not use those fields to circumvent access controls.",
+              "- `DEAD_404`, `TIMEOUT`, `TLS_ERROR`, and `NETWORK_ERROR` are poor signs for direct playback.",
+              "",
+          ]
+
+          Path("PREMIUM_SPORTS_AUDIT.md").write_text("\n".join(lines), encoding="utf-8")
+
+      - name: Remove cloned repositories
+        shell: bash
+        run: rm -rf candidates
+
+      - name: Commit audit report
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add PREMIUM_SPORTS_AUDIT.md
+          git diff --cached --quiet && echo "No audit changes." || (git commit -m "Update premium sports audit" && git push)
