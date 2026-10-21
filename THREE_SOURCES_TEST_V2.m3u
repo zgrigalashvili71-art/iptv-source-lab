@@ -81,6 +81,10 @@ https://kanal75xto-llhls.akamaized.net/live/Data/atg-kanal-15-02a-rr/HLS-Legacy-
 https://5c7b683162943.streamlock.net/live/ngrp:bahrainsportstwo_all/playlist.m3u8
 #EXTINF:-1 group-title="Sports" tvg-source="SHAJON Sports",BEK TV Sports West
 https://cdn3.wowza.com/5/ZWQ1K2NYTmpFbGsr/BEK-WOWZA-1/smil:BEKPRIMEW.smil/playlist.m3u8
+#EXTINF:-1 group-title="Sports" tvg-source="SHAJON Sports",beIN SPORTS XTRA (1080p)
+https://bein-xtra-bein.amagi.tv/playlist.m3u8
+#EXTINF:-1 group-title="Sports" tvg-source="SHAJON Sports",beIN Sports XTRA en Espanol (1080p)
+https://dc1644a9jazgj.cloudfront.net/beIN_Sports_Xtra_Espanol.m3u8
 #EXTINF:-1 group-title="Sports" tvg-source="SHAJON Sports",ColimdoT TV (720p)
 https://cnn.livestreaminggroup.info:3132/live/colimdotvlive.m3u8
 #EXTINF:-1 group-title="Sports" tvg-source="SHAJON Sports",Cowboy TV
@@ -89,6 +93,8 @@ https://amg17292-amg17292c1-distrotv-us-4170.playouts.now.amagi.tv/playlist/amg1
 https://streams2.sofast.tv/ptnr-yupptv/title-cricketgold/v1/master/611d79b11b77e2f571934fd80ca1413453772ac7/b2048bb8-1686-4432-aa50-647245383e0c/manifest.m3u8
 #EXTINF:-1 group-title="Sports" tvg-source="SHAJON Sports",---Live(DD Sports)---
 https://d3qs3d2rkhfqrt.cloudfront.net/out/v1/b17adfe543354fdd8d189b110617cddd/index.m3u8
+#EXTINF:-1 group-title="Sports" tvg-source="SHAJON Sports",DAZN Combat (1080p)
+https://dazn-combat-rakuten.amagi.tv/hls/amagi_hls_data_rakutenAA-dazn-combat-rakuten/CDN/master.m3u8
 #EXTINF:-1 group-title="Sports" tvg-source="SHAJON Sports",DraftKings Network (1080p)
 https://na.linear.zype.com/e0bd0e23-a958-4e43-8164-4f2fef8876a8/fd3614bd-90bf-4530-a277-65ae3a1720c8-zype/live.m3u8
 #EXTINF:-1 group-title="Sports" tvg-source="SHAJON Sports",Equidia (1080p)
@@ -305,6 +311,8 @@ http://31.148.48.15/Match_Igra_HD/index.m3u8
 http://31.148.48.15/Russkiy_Ekstrim/index.m3u8
 #EXTINF:-1 group-title="Sports" tvg-source="SHAJON Sports",Футбол (720p)
 http://31.148.48.15/Futbol_HD/index.m3u8
+#EXTINF:-1 group-title="Sports" tvg-source="SHAJON Sports",--Live(beIN SPORTS XTRA)--
+https://bein-esp-xumo.amagi.tv/playlistR720P.m3u8
 #EXTINF:-1 group-title="Sports" tvg-source="SHAJON Sports",Star Sports 1 Hindi
 https://starsportshindiii.pages.dev/index.m3u8
 #EXTINF:-1 group-title="Sports" tvg-source="SHAJON Sports",--Live(Euro Sport 1)--
@@ -493,14 +501,32 @@ http://190.117.20.37:8000/play/a08d/index.m3u8
 http://191.97.49.82:8001/play/a00m/index.m3u8
 #EXTINF:-1 group-title="Other" tvg-source="SHAJON Universal",МАТЧ! ФУТБOЛ 2HD 🇷🇺
 http://cdntv.online/low/9mlxywika2/56.m3u8
+#EXTINF:-1 group-title="Other" tvg-source="SHAJON Universal",Dazn 1 🇵🇹
+http://wo0dyefk.dienalt.org/iptv/DV3AC2Q6YSR9XE/2531/index.m3u8
+#EXTINF:-1 group-title="Other" tvg-source="SHAJON Universal",Dazn 1 🇵🇹
+http://wo0dyefk.dienalt.org/iptv/DV3AC2Q6YSR9XE/19158/index.m3u8
+#EXTINF:-1 group-title="Other" tvg-source="SHAJON Universal",Bein Sport 3 🇫🇷
+http://145.239.5.177:80/559/index.m3u8
+#EXTINF:-1 group-title="Other" tvg-source="SHAJON Universal",Dazn 2 🇵🇹
+http://wo0dyefk.dienalt.org/iptv/DV3AC2Q6YSR9XE/2532/index.m3u8
+#EXTINF:-1 group-title="Other" tvg-source="SHAJON Universal",Dazn 3 🇵🇹
+http://wo0dyefk.dienalt.org/iptv/DV3AC2Q6YSR9XE/7062/index.m3u8
 #EXTINF:-1 group-title="Other" tvg-source="SHAJON Universal",SKY SPORT LALIGA 🇲🇽
 http://181.78.109.48:9998/play/a06r/index.m3u8
+#EXTINF:-1 group-title="Other" tvg-source="SHAJON Universal",TNT SPORTS PREMIUM 🇬🇧
+http://200.115.120.1:8000/play/ca040/index.m3u8
+#EXTINF:-1 group-title="Other" tvg-source="SHAJON Universal",Dazn 4 🇵🇹
+http://wo0dyefk.dienalt.org/iptv/DV3AC2Q6YSR9XE/2534/index.m3u8
+#EXTINF:-1 group-title="Other" tvg-source="SHAJON Universal",Dazn 5 🇵🇹
+http://wo0dyefk.dienalt.org/iptv/DV3AC2Q6YSR9XE/2535/index.m3u8
 #EXTINF:-1 group-title="Other" tvg-source="SHAJON Universal",CANAL + Sport 🇫🇷
 http://151.80.18.177:86/Canal+_sport_HD/index.m3u8
 #EXTINF:-1 group-title="Other" tvg-source="SHAJON Universal",Матч! 🇷🇺
 http://tv.tuva.ru/machtv/index.m3u8
 #EXTINF:-1 group-title="Other" tvg-source="SHAJON Universal",Матч! 🇷🇺
 http://cdntv.online/low/9mlxywika2/48.m3u8
+#EXTINF:-1 group-title="Other" tvg-source="SHAJON Universal",Setanta Sport 🇺🇦
+http://217.174.225.146/hls/ch004_720/index.m3u8
 #EXTINF:-1 group-title="Other" tvg-source="SHAJON Universal",Матч! Футбол 3 HD 🇷🇺
 http://185.57.68.33:8091/110/playlist.m3u8
 #EXTINF:-1 group-title="Other" tvg-source="SHAJON Universal",Футбол 3 (SD) 🇷🇺
@@ -525,6 +551,8 @@ http://88.212.15.19/live/test_arenasport_dva/playlist.m3u8
 http://cdntv.online/low/9mlxywika2/1022.m3u8
 #EXTINF:-1 group-title="Other" tvg-source="SHAJON Universal",NOVA SPORT 1 HD 🇨🇿
 http://wo0dyefk.dienalt.org/iptv/DV3AC2Q6YSR9XE/2555/index.m3u8
+#EXTINF:-1 group-title="Other" tvg-source="SHAJON Universal",BEIN SPORT EXTRA Ñ 🇪🇸
+https://bein-esp-xumo.amagi.tv/playlistR1080p.m3u8
 #EXTINF:-1 group-title="Other" tvg-source="SHAJON Universal",МАТЧ! ФУТБOЛ 1HD 🇷🇺
 http://cdntv.online/low/9mlxywika2/55.m3u8
 #EXTINF:-1 group-title="Other" tvg-source="SHAJON Universal",МАТЧ! ФУТБOЛ 3HD 🇷🇺
@@ -4285,6 +4313,8 @@ https://stream8.cinerama.uz/1206/tracks-v1a1/playlist.m3u8
 https://s6.hopslan.com/ardX/tracks-v1a1/mono.m3u8
 #EXTINF:-1 group-title="Series" tvg-source="SHAJON Universal",Dark Matter TV (720p)
 https://tricoast-tv-dark-matter-01-us.ono.wurl.tv/playlist.m3u8
+#EXTINF:-1 group-title="Undefined" tvg-source="SHAJON Universal",Dazn Ringside (1080p)
+https://aegis-cloudfront-1.tubi.video/bfad29e2-5bee-44f3-8256-127324e8b106/playlist.m3u8
 #EXTINF:-1 group-title="General" tvg-source="SHAJON Universal",DD Bihar (720p)
 https://cdn-4.pishow.tv/live/35/master.m3u8
 #EXTINF:-1 group-title="General" tvg-source="SHAJON Universal",DD Chhattisgarh (720p)
@@ -7177,6 +7207,8 @@ http://65.36.6.216:1935/live/kcwx.smil/playlist.m3u8
 https://appletree-mytime-samsungbrazil.amagi.tv/playlist.m3u8
 #EXTINF:-1 group-title="Movies" tvg-source="SHAJON Universal",MyTime movie network Spain (1080p)
 https://appletree-mytimespain-rakuten.amagi.tv/playlist.m3u8
+#EXTINF:-1 group-title="Undefined" tvg-source="SHAJON Universal",MyZen Wellbeing TV (1080p)
+https://rakutenaa-myzen-en-rakuten-5sex7.amagi.tv/playlist/rakutenAA-myzen-en-rakuten/playlist.m3u8
 #EXTINF:-1 group-title="Undefined" tvg-source="SHAJON Universal",MyTime Movie Network France (1080p)
 https://mytimemoviefrance-rakuten.amagi.tv/playlist.m3u8
 #EXTINF:-1 group-title="Movies" tvg-source="SHAJON Universal",MyTime Movie Network (1080p)
@@ -12507,6 +12539,10 @@ https://live20.bozztv.com/giatvplayout7/giatv-208343/playlist.m3u8
 https://amg00793-bbcstudios-amg00793c3-lg-us-2528.playouts.now.amagi.tv/playlist/amg00793-bbcstudios-bbcearta-lgus/playlist.m3u8
 #EXTINF:-1 group-title="SportzX" tvg-source="SHAJON:fifa.m3u",SportzX Live
 https://edgestream1.pro/hls/sqhdghzavbxu75.m3u8?
+#EXTINF:-1 group-title="SKY" tvg-source="SHAJON:fifa.m3u",SKY SPORTS SD
+https://tmaxapp.site/8wirwjs76erftg/skysport1nz.m3u8
+#EXTINF:-1 group-title="beIN" tvg-source="SHAJON:fifa.m3u",beIN ARABIC FHD
+https://pub-f6b8e84cfb6a4f70b4fc28e51d834e00.r2.dev/BMax1-1/index.m3u8
 #EXTINF:-1 group-title="ISCREEN" tvg-source="SHAJON:fifa.m3u",ISCREEN BD FHD
 https://ld58dqz8ajj8.rockstreamer.com/isc_ssai/isc_ssai_ads/main2/isc_ssai_1080p/chunks.m3u8
 #EXTINF:-1 group-title="4K" tvg-source="SHAJON:fifa.m3u",IRIB 4K
@@ -12543,6 +12579,22 @@ https://edgestream1.pro/hls/pllmazjkdzajh72.m3u8?
 https://edgestream2.pro/hls/ztyarueaghj71.m3u8?
 #EXTINF:-1 group-title="SportzX" tvg-source="SHAJON:fifa.m3u",SportzX Live
 https://edgestream1.pro/hls/ztyarueaghj71.m3u8?
+#EXTINF:-1 group-title="DAZN" tvg-source="SHAJON:fifa.m3u",DAZN 1 HD
+http://znty.dyndns.org:5010/hls/eleven1.m3u8
+#EXTINF:-1 group-title="DAZN" tvg-source="SHAJON:fifa.m3u",DAZN 2 HD
+http://znty.dyndns.org:5010/hls/eleven2.m3u8
+#EXTINF:-1 group-title="DAZN" tvg-source="SHAJON:fifa.m3u",DAZN 4 HD
+http://znty.dyndns.org:5010/hls/eleven4.m3u8
+#EXTINF:-1 group-title="DAZN" tvg-source="SHAJON:fifa.m3u",DAZN 5 HD
+http://znty.dyndns.org:5010/hls/eleven5.m3u8
+#EXTINF:-1 group-title="Bein Sports - 🇫🇷 France" tvg-source="SHAJON:fifa.m3u",Bein Sports - 🇫🇷 France
+http://145.239.5.177/559/mpegts
+#EXTINF:-1 group-title="Bein Sports 🇫🇷 France" tvg-source="SHAJON:fifa.m3u",Bein Sports 🇫🇷 France
+http://145.239.5.177:80/559/index.m3u8
+#EXTINF:-1 group-title="Bein Sports" tvg-source="SHAJON:fifa.m3u",Bein Sports 4
+https://bein-esp-xumo.amagi.tv/playlistR1080p.m3u8
+#EXTINF:-1 group-title="BeIN Sports Xtra" tvg-source="SHAJON:fifa.m3u",beIN Sports Xtra
+https://bein-esp-xumo.amagi.tv/playlistR720P.m3u8
 #EXTINF:-1 group-title="Cricket Gold" tvg-source="SHAJON:fifa.m3u",Cricket Gold
 https://streams2.sofast.tv/ptnr-yupptv/title-cricketgold/v1/manifest/611d79b11b77e2f571934fd80ca1413453772ac7/b2048bb8-1686-4432-aa50-647245383e0c/bfc6a36e-c250-4afe-b6c9-2bc57855bb7d/4.m3u8
 #EXTINF:-1 group-title="FS" tvg-source="SHAJON:fifa.m3u",FS1 05
