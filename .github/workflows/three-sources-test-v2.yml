@@ -66,12 +66,6 @@ jobs:
               "bun.lockb",
           }
 
-          premium_terms = [
-              "bein", "sky sports", "dazn", "tnt sports",
-              "bt sport", "supersport", "canal+",
-              "setanta", "viaplay"
-          ]
-
           def fetch(url):
               req = urllib.request.Request(
                   url,
@@ -86,10 +80,6 @@ jobs:
           def clean(v):
               return re.sub(r"\s+", " ", str(v or "")).strip()
 
-          def is_premium_name(name):
-              low = name.lower()
-              return any(x in low for x in premium_terms)
-
           entries = []
           seen = set()
           stats = []
@@ -103,10 +93,6 @@ jobs:
                   return
 
               if not url.lower().startswith(("http://", "https://")):
-                  return
-
-              # Do not republish obvious subscription-channel mirrors.
-              if is_premium_name(name):
                   return
 
               key = (name.lower(), url)
