@@ -1,0 +1,369 @@
+name: Build Separate IPTV Test Playlist V2
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Clone candidate repositories
+        shell: bash
+        run: |
+          rm -rf candidates
+          mkdir -p candidates
+
+          git clone --depth=1 https://github.com/abyssscold/High-Stability-IPTV-Service.git candidates/high-stability || true
+          git clone --depth=1 https://github.com/SHAJON-404/iptv-web.git candidates/shajon || true
+          git clone --depth=1 https://github.com/LS-Station/IPTVPulse-Daily-Updates.git candidates/iptvpulse || true
+
+      - name: Build test playlist
+        shell: python
+        run: |
+          import json
+          import re
+          import urllib.request
+          from pathlib import Path
+
+          OUT = Path("THREE_SOURCES_TEST_V2.m3u")
+          REPORT = Path("THREE_SOURCES_TEST_V2_REPORT.txt")
+
+          repos = [
+              ("High-Stability", Path("candidates/high-stability")),
+              ("SHAJON", Path("candidates/shajon")),
+              ("IPTVPulse", Path("candidates/iptvpulse")),
+          ]
+
+          remote_json = [
+              (
+                  "SHAJON Sports",
+                  "https://raw.githubusercontent.com/SHAJON-404/iptv-web/main/app/data/sports.json"
+              ),
+              (
+                  "SHAJON Universal",
+                  "https://raw.githubusercontent.com/SHAJON-404/iptv-web/main/app/data/channels.json"
+              ),
+          ]
+
+          bad_dirs = {
+              ".git", "node_modules", "dist", "build",
+              "vendor", ".next", ".cache"
+          }
+
+          bad_files = {
+              "package-lock.json",
+              "package.json",
+              "yarn.lock",
+              "pnpm-lock.yaml",
+              "bun.lockb",
+          }
+
+          premium_terms = [
+              "bein", "sky sports", "dazn", "tnt sports",
+              "bt sport", "supersport", "canal+",
+              "setanta", "viaplay"
+          ]
+
+          def fetch(url):
+              req = urllib.request.Request(
+                  url,
+                  headers={
+                      "User-Agent": "Mozilla/5.0 IPTVTest/2.0",
+                      "Accept": "*/*",
+                  },
+              )
+              with urllib.request.urlopen(req, timeout=40) as r:
+                  return r.read().decode("utf-8", errors="replace")
+
+          def clean(v):
+              return re.sub(r"\s+", " ", str(v or "")).strip()
+
+          def is_premium_name(name):
+              low = name.lower()
+              return any(x in low for x in premium_terms)
+
+          entries = []
+          seen = set()
+          stats = []
+
+          def add(name, group, url, source):
+              name = clean(name)
+              group = clean(group) or source
+              url = clean(url)
+
+              if not name or not url:
+                  return
+
+              if not url.lower().startswith(("http://", "https://")):
+                  return
+
+              # Do not republish obvious subscription-channel mirrors.
+              if is_premium_name(name):
+                  return
+
+              key = (name.lower(), url)
+
+              if key in seen:
+                  return
+
+              seen.add(key)
+
+              entries.append({
+                  "name": name,
+                  "group": group,
+                  "url": url,
+                  "source": source,
+              })
+
+          def parse_m3u(text, source):
+              before = len(entries)
+
+              name = None
+              group = source
+
+              for raw in text.splitlines():
+                  line = raw.strip()
+
+                  if not line:
+                      continue
+
+                  if line.upper().startswith("#EXTINF"):
+                      name = (
+                          line.split(",", 1)[1].strip()
+                          if "," in line
+                          else "Unknown"
+                      )
+
+                      m = re.search(
+                          r'group-title="([^"]*)"',
+                          line,
+                          re.I
+                      )
+
+                      group = (
+                          m.group(1).strip()
+                          if m
+                          else source
+                      )
+
+                      continue
+
+                  if name and not line.startswith("#"):
+                      if line.lower().startswith(
+                          ("http://", "https://")
+                      ):
+                          add(name, group, line, source)
+
+                      name = None
+                      group = source
+
+              return len(entries) - before
+
+          def walk_json(obj, source):
+              before = len(entries)
+
+              name_keys = [
+                  "name", "title", "channel",
+                  "channel_name", "channelName", "label"
+              ]
+
+              group_keys = [
+                  "group", "category",
+                  "group-title", "country", "region"
+              ]
+
+              def walk(x):
+                  if isinstance(x, dict):
+
+                      name = ""
+
+                      for k in name_keys:
+                          v = x.get(k)
+
+                          if isinstance(v, str) and v.strip():
+                              name = v.strip()
+                              break
+
+                      group = source
+
+                      for k in group_keys:
+                          v = x.get(k)
+
+                          if isinstance(v, str) and v.strip():
+                              group = v.strip()
+                              break
+
+                      urls = []
+
+                      for v in x.values():
+                          if (
+                              isinstance(v, str)
+                              and v.startswith(
+                                  ("http://", "https://")
+                              )
+                          ):
+                              low = v.lower()
+
+                              if (
+                                  ".m3u8" in low
+                                  or ".mpd" in low
+                                  or "/live/" in low
+                                  or "/stream" in low
+                              ):
+                                  urls.append(v)
+
+                      if name and urls:
+                          add(
+                              name,
+                              group,
+                              urls[0],
+                              source
+                          )
+
+                      for v in x.values():
+                          walk(v)
+
+                  elif isinstance(x, list):
+                      for v in x:
+                          walk(v)
+
+              walk(obj)
+
+              return len(entries) - before
+
+          # SHAJON JSON databases
+          for source, url in remote_json:
+              try:
+                  text = fetch(url)
+                  data = json.loads(text)
+
+                  added = walk_json(
+                      data,
+                      source
+                  )
+
+                  stats.append(
+                      f"{source}: added {added}"
+                  )
+
+              except Exception as e:
+                  stats.append(
+                      f"{source}: FAILED - {e}"
+                  )
+
+          # M3U files inside all 3 repositories
+          for source, root in repos:
+
+              if not root.exists():
+                  stats.append(
+                      f"{source}: repository missing"
+                  )
+                  continue
+
+              before = len(entries)
+              files = 0
+
+              for p in root.rglob("*"):
+
+                  if not p.is_file():
+                      continue
+
+                  if any(
+                      part in bad_dirs
+                      for part in p.parts
+                  ):
+                      continue
+
+                  if p.name in bad_files:
+                      continue
+
+                  if p.suffix.lower() not in {
+                      ".m3u", ".m3u8"
+                  }:
+                      continue
+
+                  try:
+                      text = p.read_text(
+                          encoding="utf-8",
+                          errors="replace"
+                      )
+                  except Exception:
+                      continue
+
+                  files += 1
+
+                  parse_m3u(
+                      text,
+                      f"{source}:{p.name}"
+                  )
+
+              stats.append(
+                  f"{source}: playlist files={files}, "
+                  f"added={len(entries)-before}"
+              )
+
+          lines = ["#EXTM3U"]
+
+          for e in entries:
+
+              safe_group = (
+                  e["group"]
+                  .replace('"', "'")
+              )
+
+              safe_source = (
+                  e["source"]
+                  .replace('"', "'")
+              )
+
+              safe_name = (
+                  e["name"]
+                  .replace('"', "'")
+              )
+
+              lines.append(
+                  f'#EXTINF:-1 '
+                  f'group-title="{safe_group}" '
+                  f'tvg-source="{safe_source}",'
+                  f'{safe_name}'
+              )
+
+              lines.append(e["url"])
+
+          OUT.write_text(
+              "\n".join(lines) + "\n",
+              encoding="utf-8",
+          )
+
+          REPORT.write_text(
+              "THREE SOURCES TEST V2\n"
+              "=====================\n"
+              + "\n".join(stats)
+              + f"\n\nTOTAL ENTRIES: {len(entries)}\n",
+              encoding="utf-8",
+          )
+
+          print("\n".join(stats))
+          print("TOTAL ENTRIES:", len(entries))
+
+      - name: Remove clones
+        if: always()
+        run: rm -rf candidates
+
+      - name: Commit test playlist
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add THREE_SOURCES_TEST_V2.m3u THREE_SOURCES_TEST_V2_REPORT.txt
+
+          git diff --cached --quiet && echo "No changes." || \
+          (git commit -m "Build three-source test playlist" && git push)
