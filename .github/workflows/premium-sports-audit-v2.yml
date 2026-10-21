@@ -1,0 +1,538 @@
+name: Premium Sports Audit V2
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout lab repo
+        uses: actions/checkout@v4
+
+      - name: Clone candidate repos
+        shell: bash
+        run: |
+          set -e
+          rm -rf candidates
+          mkdir -p candidates
+          git clone --depth=1 https://github.com/abyssscold/High-Stability-IPTV-Service.git candidates/high-stability || true
+          git clone --depth=1 https://github.com/SHAJON-404/iptv.git candidates/shajon || true
+          git clone --depth=1 https://github.com/LS-Station/IPTVPulse-Daily-Updates.git candidates/iptvpulse || true
+
+      - name: Run corrected audit
+        shell: python
+        run: |
+          import json
+          import re
+          import socket
+          import ssl
+          import time
+          import urllib.error
+          import urllib.request
+          from collections import Counter, defaultdict
+          from pathlib import Path
+          from urllib.parse import urljoin, urlparse
+
+          OUT = Path("reports")
+          OUT.mkdir(exist_ok=True)
+
+          CURRENT_V2 = "https://raw.githubusercontent.com/zgrigalashvili71-art/-mega-iptv/main/ALL_TV_PLUS_SPORTS.m3u"
+
+          REPOS = [
+              ("High-Stability-IPTV-Service", Path("candidates/high-stability")),
+              ("SHAJON-404 IPTV", Path("candidates/shajon")),
+              ("IPTVPulse-Daily-Updates", Path("candidates/iptvpulse")),
+          ]
+
+          SPORTS_TERMS = [
+              "bein", "sky sports", "dazn", "tnt sports", "bt sport", "espn",
+              "fox sports", "supersport", "super sport", "eurosport",
+              "canal+ sport", "canal plus sport", "eleven sports", "premier sports",
+              "viaplay", "ziggo sport", "sport tv", "max sport", "setanta",
+              "nba tv", "nfl network", "mlb network", "nhl network",
+              "golf channel", "tennis channel", "racing tv", "arena sport",
+              "sport klub", "sportklub", "nova sport", "polsat sport",
+              "movistar deportes", "laliga", "premier league", "champions league",
+              "formula 1", "f1", "motogp", "ufc", "wwe"
+          ]
+
+          BAD_FILE_NAMES = {
+              "package-lock.json", "package.json", "pnpm-lock.yaml", "yarn.lock",
+              "bun.lockb", "composer.lock", "poetry.lock", "requirements.txt"
+          }
+          BAD_DIRS = {
+              "node_modules", ".git", ".next", "dist", "build", "vendor",
+              ".cache", "coverage"
+          }
+
+          URL_RE = re.compile(r'https?://[^\s\'"<>]+', re.I)
+
+          def request_text(url, timeout=35, tries=2):
+              last = None
+              for attempt in range(tries):
+                  try:
+                      req = urllib.request.Request(
+                          url,
+                          headers={
+                              "User-Agent": "Mozilla/5.0 IPTV-Audit/2.0",
+                              "Accept": "*/*",
+                          },
+                      )
+                      with urllib.request.urlopen(req, timeout=timeout) as r:
+                          return r.read().decode("utf-8", errors="replace")
+                  except Exception as e:
+                      last = e
+                      if attempt + 1 < tries:
+                          time.sleep(2)
+              raise last
+
+          def clean_url(u):
+              return u.rstrip("),.;]}\\").strip()
+
+          def looks_streamish(u):
+              low = u.lower()
+              return (
+                  ".m3u8" in low or ".m3u" in low or ".mpd" in low or
+                  "/live/" in low or "/stream" in low or "playlist" in low
+              )
+
+          def looks_playlist_url(u):
+              low = u.lower()
+              return (
+                  low.endswith(".m3u") or low.endswith(".m3u8") or
+                  "playlist" in low or "channels" in low or "sports" in low
+              )
+
+          def sports_match(name):
+              low = str(name or "").lower()
+              return any(term in low for term in SPORTS_TERMS)
+
+          def brand(name):
+              low = name.lower()
+              for term in SPORTS_TERMS:
+                  if term in low:
+                      return term
+              return "sports"
+
+          def fetch_v2_names():
+              names = set()
+              try:
+                  text = request_text(CURRENT_V2)
+                  for line in text.splitlines():
+                      if line.upper().startswith("#EXTINF") and "," in line:
+                          names.add(line.split(",", 1)[1].strip().lower())
+              except Exception as e:
+                  print("Could not fetch V2:", e)
+              return names
+
+          def probe(url, timeout=8):
+              if not url.lower().startswith(("http://", "https://")):
+                  return "NO_HTTP_URL"
+
+              req = urllib.request.Request(
+                  url,
+                  headers={
+                      "User-Agent": "Mozilla/5.0 IPTV-Audit/2.0",
+                      "Accept": "*/*",
+                      "Range": "bytes=0-2047",
+                  },
+              )
+              ctx = ssl.create_default_context()
+
+              try:
+                  with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
+                      code = getattr(r, "status", 200)
+                      ctype = (r.headers.get("Content-Type") or "").lower()
+                      data = r.read(2048)
+                      sample = data.decode("utf-8", errors="ignore").lower()
+
+                      if code in (200, 206):
+                          if "#extm3u" in sample or "mpegurl" in ctype:
+                              return "HLS_RESPONSE"
+                          if "<mpd" in sample or "dash+xml" in ctype:
+                              return "DASH_RESPONSE"
+                          if ctype.startswith("video/") or "octet-stream" in ctype:
+                              return "MEDIA_RESPONSE"
+                          return f"HTTP_{code}"
+                      return f"HTTP_{code}"
+              except urllib.error.HTTPError as e:
+                  if e.code in (401, 403):
+                      return f"RESTRICTED_{e.code}"
+                  if e.code == 404:
+                      return "DEAD_404"
+                  return f"HTTP_ERROR_{e.code}"
+              except urllib.error.URLError as e:
+                  s = str(e.reason).lower()
+                  if "timed out" in s:
+                      return "TIMEOUT"
+                  if "ssl" in s or "certificate" in s:
+                      return "TLS_ERROR"
+                  return "NETWORK_ERROR"
+              except socket.timeout:
+                  return "TIMEOUT"
+              except Exception:
+                  return "ERROR"
+
+          def parse_m3u(text, source):
+              out = []
+              current_name = None
+              current_group = ""
+              current_meta = ""
+
+              for raw in text.splitlines():
+                  line = raw.strip()
+                  if not line:
+                      continue
+
+                  if line.upper().startswith("#EXTINF"):
+                      current_meta = line
+                      current_name = line.split(",", 1)[1].strip() if "," in line else ""
+                      m = re.search(r'group-title="([^"]*)"', line, re.I)
+                      current_group = m.group(1) if m else ""
+                      continue
+
+                  if current_name and not line.startswith("#"):
+                      if sports_match(current_name):
+                          out.append({
+                              "name": current_name,
+                              "group": current_group,
+                              "source": source,
+                              "url": line if line.lower().startswith(("http://", "https://")) else "",
+                              "meta": current_meta,
+                          })
+                      current_name = None
+                      current_group = ""
+                      current_meta = ""
+
+              return out
+
+          def walk_json_for_playlists(obj, base_url="", found=None):
+              if found is None:
+                  found = []
+
+              if isinstance(obj, dict):
+                  for k, v in obj.items():
+                      if isinstance(v, str):
+                          if v.startswith(("http://", "https://")) and looks_playlist_url(v):
+                              found.append(v)
+                          elif base_url and any(x in k.lower() for x in ("url", "playlist", "file", "path")):
+                              if v.endswith((".m3u", ".m3u8", ".json")):
+                                  found.append(urljoin(base_url, v))
+                      else:
+                          walk_json_for_playlists(v, base_url, found)
+              elif isinstance(obj, list):
+                  for v in obj:
+                      walk_json_for_playlists(v, base_url, found)
+
+              return found
+
+          def extract_candidate_urls_from_repo(repo_path):
+              urls = set()
+              endpoint_hints = []
+
+              for p in repo_path.rglob("*"):
+                  if not p.is_file():
+                      continue
+                  if any(part in BAD_DIRS for part in p.parts):
+                      continue
+                  if p.name in BAD_FILE_NAMES:
+                      continue
+                  if p.suffix.lower() not in {".md", ".json", ".m3u", ".m3u8", ".txt", ".js", ".ts", ".tsx", ".yml", ".yaml"}:
+                      continue
+                  try:
+                      if p.stat().st_size > 8_000_000:
+                          continue
+                      text = p.read_text(encoding="utf-8", errors="replace")
+                  except Exception:
+                      continue
+
+                  for u in URL_RE.findall(text):
+                      u = clean_url(u)
+                      if looks_playlist_url(u):
+                          urls.add(u)
+
+                  if "available_playlist.json" in text or "PLAYLIST_DOMAIN" in text:
+                      endpoint_hints.append(str(p.relative_to(repo_path)))
+
+              return sorted(urls), endpoint_hints
+
+          v2_names = fetch_v2_names()
+
+          report_rows = []
+          discovery_notes = []
+
+          # ------------------------------------------------------------
+          # A) Direct repository playlist/database discovery
+          # ------------------------------------------------------------
+          discovered_playlist_urls = []
+
+          for repo_name, repo_path in REPOS:
+              if not repo_path.exists():
+                  discovery_notes.append(f"{repo_name}: repository clone missing")
+                  continue
+
+              urls, hints = extract_candidate_urls_from_repo(repo_path)
+              discovery_notes.append(
+                  f"{repo_name}: discovered {len(urls)} playlist/database-like URLs; "
+                  f"dynamic-endpoint hints in {len(hints)} files"
+              )
+              discovered_playlist_urls.extend((repo_name, u) for u in urls)
+
+              # Also parse actual .m3u/.m3u8 files stored in repo.
+              for p in repo_path.rglob("*"):
+                  if not p.is_file():
+                      continue
+                  if any(part in BAD_DIRS for part in p.parts):
+                      continue
+                  if p.name in BAD_FILE_NAMES:
+                      continue
+                  if p.suffix.lower() not in {".m3u", ".m3u8"}:
+                      continue
+                  try:
+                      text = p.read_text(encoding="utf-8", errors="replace")
+                  except Exception:
+                      continue
+                  report_rows.extend(
+                      parse_m3u(text, f"{repo_name}:{p.relative_to(repo_path)}")
+                  )
+
+          # ------------------------------------------------------------
+          # B) SHAJON dynamic playlist discovery
+          # ------------------------------------------------------------
+          # The project's README documents PLAYLIST_DOMAIN=iamshajon.com and
+          # "Dynamic available_playlist.json domain". Test common direct forms.
+          shajon_index_candidates = [
+              "https://iamshajon.com/available_playlist.json",
+              "https://www.iamshajon.com/available_playlist.json",
+          ]
+
+          for url in shajon_index_candidates:
+              try:
+                  text = request_text(url)
+                  discovery_notes.append(f"SHAJON index reachable: {urlparse(url).netloc}{urlparse(url).path}")
+                  try:
+                      data = json.loads(text)
+                      for pl in walk_json_for_playlists(data, url):
+                          discovered_playlist_urls.append(("SHAJON dynamic index", pl))
+                  except Exception:
+                      # If it is M3U-like instead of JSON, parse directly.
+                      report_rows.extend(parse_m3u(text, "SHAJON dynamic index"))
+              except Exception as e:
+                  discovery_notes.append(
+                      f"SHAJON index not reachable at {urlparse(url).netloc}{urlparse(url).path}: {type(e).__name__}"
+                  )
+
+          # ------------------------------------------------------------
+          # C) Fetch discovered playlist URLs
+          # ------------------------------------------------------------
+          seen_playlist_urls = set()
+          playlist_fetch_count = 0
+
+          for source_name, url in discovered_playlist_urls:
+              if url in seen_playlist_urls:
+                  continue
+              seen_playlist_urls.add(url)
+
+              if playlist_fetch_count >= 80:
+                  break
+
+              # Skip package/download links that are clearly not channel data.
+              low = url.lower()
+              if any(x in low for x in ("/releases/download/", ".zip", ".apk", ".exe", ".tar.gz")):
+                  continue
+
+              try:
+                  text = request_text(url, timeout=25, tries=1)
+              except Exception:
+                  continue
+
+              playlist_fetch_count += 1
+
+              # M3U-like
+              if "#EXTM3U" in text.upper() or "#EXTINF" in text.upper():
+                  report_rows.extend(parse_m3u(text, f"{source_name} remote playlist"))
+                  continue
+
+              # JSON playlist index / channel data
+              t = text.strip()
+              if t.startswith(("{", "[")):
+                  try:
+                      data = json.loads(t)
+
+                      # First discover nested playlists.
+                      for nested in walk_json_for_playlists(data, url):
+                          if nested not in seen_playlist_urls:
+                              discovered_playlist_urls.append((source_name, nested))
+
+                      # Generic channel-record parser: only accept dicts that
+                      # look like channel objects and have a sports-like name.
+                      stack = [data]
+                      while stack:
+                          obj = stack.pop()
+
+                          if isinstance(obj, dict):
+                              name = ""
+                              for key in ("name", "title", "channel", "channel_name", "channelName", "label"):
+                                  v = obj.get(key)
+                                  if isinstance(v, str) and v.strip():
+                                      name = v.strip()
+                                      break
+
+                              if name and sports_match(name):
+                                  urls_here = []
+                                  for v in obj.values():
+                                      if isinstance(v, str) and v.startswith(("http://", "https://")) and looks_streamish(v):
+                                          urls_here.append(v)
+
+                                  if urls_here:
+                                      report_rows.append({
+                                          "name": name,
+                                          "group": str(obj.get("group") or obj.get("category") or ""),
+                                          "source": f"{source_name} remote JSON",
+                                          "url": urls_here[0],
+                                          "meta": "",
+                                      })
+
+                              stack.extend(obj.values())
+
+                          elif isinstance(obj, list):
+                              stack.extend(obj)
+
+                  except Exception:
+                      pass
+
+          # ------------------------------------------------------------
+          # D) Clean, dedupe, probe
+          # ------------------------------------------------------------
+          dedup = []
+          seen = set()
+
+          for r in report_rows:
+              name = r["name"].strip()
+              url = r["url"].strip()
+              if not name or not sports_match(name):
+                  continue
+              key = (name.lower(), url)
+              if key in seen:
+                  continue
+              seen.add(key)
+              r["in_v2"] = name.lower() in v2_names
+              dedup.append(r)
+
+          probe_budget = 200
+          for i, r in enumerate(dedup):
+              r["status"] = probe(r["url"]) if i < probe_budget else "NOT_PROBED_LIMIT"
+
+          statuses = Counter(r["status"] for r in dedup)
+          brands = defaultdict(list)
+          sources = defaultdict(list)
+
+          for r in dedup:
+              brands[brand(r["name"])].append(r)
+              sources[r["source"]].append(r)
+
+          reachable = {"HLS_RESPONSE", "DASH_RESPONSE", "MEDIA_RESPONSE", "HTTP_200", "HTTP_206"}
+
+          lines = [
+              "# Premium Sports Audit V2",
+              "",
+              "The previous audit produced false positives from `package-lock.json`. "
+              "This corrected audit excludes lockfiles/dependency metadata and only accepts channel-like records or actual M3U entries.",
+              "",
+              f"- Real sports-like channel records discovered: **{len(dedup)}**",
+              f"- Probe budget used: **{min(len(dedup), probe_budget)}**",
+              f"- New names vs current V2: **{sum(1 for r in dedup if not r['in_v2'])}**",
+              "",
+              "## Discovery notes",
+          ]
+
+          for note in discovery_notes:
+              lines.append(f"- {note}")
+
+          lines += ["", "## Probe results"]
+          for status, count in statuses.most_common():
+              lines.append(f"- **{status}**: {count}")
+
+          lines += [
+              "",
+              "## Brand summary",
+              "",
+              "| Brand/search term | Records | Reachable-like responses | Restricted 401/403 | Dead 404 | New names vs V2 |",
+              "|---|---:|---:|---:|---:|---:|",
+          ]
+
+          for b, rs in sorted(brands.items(), key=lambda kv: len(kv[1]), reverse=True):
+              good = sum(1 for r in rs if r["status"] in reachable)
+              restricted = sum(1 for r in rs if r["status"] in ("RESTRICTED_401", "RESTRICTED_403"))
+              dead = sum(1 for r in rs if r["status"] == "DEAD_404")
+              new = sum(1 for r in rs if not r["in_v2"])
+              lines.append(f"| {b} | {len(rs)} | {good} | {restricted} | {dead} | {new} |")
+
+          lines += [
+              "",
+              "## Source summary",
+              "",
+              "| Source | Records | Reachable-like responses | New names vs V2 |",
+              "|---|---:|---:|---:|",
+          ]
+
+          for s, rs in sorted(sources.items(), key=lambda kv: len(kv[1]), reverse=True):
+              good = sum(1 for r in rs if r["status"] in reachable)
+              new = sum(1 for r in rs if not r["in_v2"])
+              lines.append(f"| `{s}` | {len(rs)} | {good} | {new} |")
+
+          lines += [
+              "",
+              "## Channel samples",
+              "",
+              "Stream URLs are intentionally omitted.",
+              "",
+              "| Channel | Source | Group | In V2? | Probe status |",
+              "|---|---|---|---|---|",
+          ]
+
+          ordered = sorted(
+              dedup,
+              key=lambda r: (
+                  r["in_v2"],
+                  0 if r["status"] in reachable else 1,
+                  r["name"].lower()
+              )
+          )
+
+          for r in ordered[:250]:
+              lines.append(
+                  f"| {r['name'].replace('|','/')} | "
+                  f"`{r['source'].replace('|','/')}` | "
+                  f"{r['group'].replace('|','/')} | "
+                  f"{'Yes' if r['in_v2'] else 'No'} | "
+                  f"{r['status']} |"
+              )
+
+          lines += [
+              "",
+              "## Important",
+              "- A media-like HTTP response does not prove a channel will play continuously or that it is authorized for redistribution.",
+              "- This audit does not use credentials, DRM keys, custom proxy bypasses, or access-control circumvention.",
+              "- The useful next step is to test any genuinely new, reachable channel names on your own player/device and compare stability against V2.",
+          ]
+
+          Path("PREMIUM_SPORTS_AUDIT_V2.md").write_text("\n".join(lines), encoding="utf-8")
+
+      - name: Remove cloned repos
+        shell: bash
+        run: rm -rf candidates
+
+      - name: Commit report
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add PREMIUM_SPORTS_AUDIT_V2.md
+          git diff --cached --quiet && echo "No report changes." || (git commit -m "Add corrected premium sports audit" && git push)
