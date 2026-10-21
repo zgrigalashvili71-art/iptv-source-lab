@@ -1,0 +1,9 @@
+THREE SOURCES TEST V2
+=====================
+SHAJON Sports: added 195
+SHAJON Universal: added 6050
+High-Stability: playlist files=0, added=0
+SHAJON: playlist files=4, added=40
+IPTVPulse: playlist files=0, added=0
+
+TOTAL ENTRIES: 6285
