@@ -5,7 +5,7 @@ This repository tests the three candidate GitHub projects separately before anyt
 | Source | Candidate files | Unique stream-like URLs | New vs V2 | Sample reachable % | Main probe outcomes |
 |---|---:|---:|---:|---:|---|
 | High-Stability-IPTV-Service | 0 | 0 | 0 | 0.0% |  |
-| SHAJON-404 IPTV | 3 | 2 | 2 | 0.0% | DEAD_404:1, NETWORK_ERROR:1 |
+| SHAJON-404 IPTV | 3 | 2 | 2 | 0.0% | NETWORK_ERROR:1, DEAD_404:1 |
 | IPTVPulse-Daily-Updates | 1 | 1 | 1 | 100.0% | HTTP_200:1 |
 
 ## What this lab does
