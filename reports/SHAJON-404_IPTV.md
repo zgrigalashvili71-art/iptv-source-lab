@@ -12,20 +12,20 @@
 - Immediately reachable/media-like: **0 (0.0%)**
 
 ### Probe results
-- NETWORK_ERROR: 1
 - DEAD_404: 1
+- NETWORK_ERROR: 1
 
 ### Most common source domains in tested sample
-- `${domain}`: 1
 - `example.com`: 1
+- `${domain}`: 1
 
 ## Candidate files
 
 | File | EXTINF entries | URLs | Stream-like URLs |
 |---|---:|---:|---:|
+| `app/components/player/PlaylistManagerView.tsx` | 0 | 1 | 1 |
 | `app/api/iptv/channels/helper.ts` | 0 | 1 | 1 |
 | `app/api/iptv/playlists/available/route.ts` | 0 | 1 | 1 |
-| `app/components/player/PlaylistManagerView.tsx` | 0 | 1 | 1 |
 
 ## Interpretation
 - `HLS_OK`, `DASH_OK`, or `MEDIA_OK` means the endpoint responded like playable media during a small probe.
